@@ -1,5 +1,6 @@
 import json
 import math
+import numpy as np
 
 
 def list2num(hint_list):
@@ -19,16 +20,6 @@ def num2list(hint_num):
 
 
 def solve_hints():
-    # wordle = Wordle()
-    # hints = {}
-    # for ans in wordle.answers:
-    #     print(ans)
-    #     dct = {}
-    #     hints[ans] = dct
-    #     for guess in wordle.supported_guesses:
-    #         dct[guess] = calc_hint(ans, guess)
-    # with open(r"hints.json", 'w', encoding='utf-8') as f:
-    #     json.dump(hints, f)
     wordle = Wordle()
     hints = []
     for i, ans in enumerate(wordle.answers):
@@ -39,6 +30,11 @@ def solve_hints():
             lst.append(list2num(calc_hint(ans, guess)))
     with open(r"hints.json", 'w', encoding='utf-8') as f:
         json.dump(hints, f, indent=None, separators=(',', ':'))
+
+
+def entropy_to_expected_score(ent):
+    min_score = 2 ** (-ent) + 2 * (1 - 2 ** (-ent))
+    return min_score + 1.5 * ent / 11.5
 
 
 def calc_hint(ans, guess):
@@ -63,6 +59,9 @@ def calc_hint(ans, guess):
 
 
 class Wordle:
+    WORDLE = 0
+    ABSURDLE = 1
+
     with open(r"wordlist.json", 'r', encoding='utf-8') as f:
         wordlist = json.load(f)
     answers = wordlist['answer']
@@ -77,43 +76,86 @@ class Wordle:
         self.psb_answers = set(Wordle.answers)
         self.len_psb_answers = len(self.psb_answers)
 
-    def give_guess(self):
+    def give_guess(self, mode=WORDLE):
+        if self.len_psb_answers == 1:
+            return self.psb_answers.pop()
         guess_list = []
-        for guess_idx, guess in enumerate(self.supported_guesses):
-            hint_count = [0 for i in range(3 ** 5)]
+        left_entropy = math.log2(self.len_psb_answers)
+        for guess_idx, guess in enumerate(Wordle.supported_guesses):
+            prob = int(guess in self.psb_answers) / self.len_psb_answers
+            hint_count = np.zeros(3**5, dtype=np.int8)
             for ans in self.psb_answers:
-                hint_count[self.hint_list[self.answers_reversed[ans]]
+                hint_count[Wordle.hint_list[self.answers_reversed[ans]]
                            [guess_idx]] += 1
-            ent = 0
-            for count in hint_count:
-                if count > 0:
-                    ent += (count / self.len_psb_answers *
-                            (-math.log2(count / self.len_psb_answers)))
-            guess_list.append(
-                ent + int(guess in self.psb_answers) / self.len_psb_answers)
-        max_ent = -1
-        max_guess = None
-        for guess_idx, ent in enumerate(guess_list):
-            if ent > max_ent:
-                max_ent = ent
-                max_guess = self.supported_guesses[guess_idx]
-        print(max_guess, max_ent)
-        print(self.psb_answers)
-        self.give_guess()
+            if mode == Wordle.WORDLE:
+                ent = 0
+                for count in hint_count:
+                    if count > 0:
+                        ent += (count / self.len_psb_answers *
+                                (-math.log2(count / self.len_psb_answers)))
+                guess_list.append(
+                    [ent, prob * 1 + (1 - prob) * (1 + entropy_to_expected_score(left_entropy - ent))])
+            # elif mode == Wordle.ABSURDLE:
+            #     guess_exp_list.append(-hint_count[0])
+        min_exp = 1000000
+        optimal_guess_idx = None
+        for guess_idx, (ent, exp) in enumerate(guess_list):
+            if exp < min_exp:
+                min_exp = exp
+                optimal_guess_idx = guess_idx
+        # print(
+        #     Wordle.supported_guesses[optimal_guess_idx], guess_list[optimal_guess_idx])
+        return Wordle.supported_guesses[optimal_guess_idx]
 
     def store_result(self, guess, hint):
         # for psb_ans in self.possible_answers:
         #     if self.hint_dict[psb_ans][guess] != hint:
         #         self.possible_answers.remove(psb_ans)
         self.psb_answers = {psb_ans for psb_ans in self.psb_answers
-                            if Wordle.hint_list[Wordle.answers_reversed[psb_ans]][Wordle.supported_guesses_reversed[guess]] == list2num(hint)}
+                            if Wordle.hint_list[Wordle.answers_reversed[psb_ans]][Wordle.supported_guesses_reversed[guess]] == hint}
         self.len_psb_answers = len(self.psb_answers)
+        if self.len_psb_answers == 0:
+            raise ValueError('No Solution.')
+        # print(self.psb_answers)
+        # self.give_guess()
 
     def clear(self):
-        self.psb_answers = self.answers
+        self.psb_answers = Wordle.answers
         self.len_psb_answers = len(self.psb_answers)
+
+
+def simulate():
+    print('hello')
+    wordle = Wordle()
+    for ans_idx, ans in list(enumerate(Wordle.answers))[:10]:
+        print(ans, end=' ')
+        score = 0
+        while True:
+            if score == 0:
+                guess = 'soare'
+            else:
+                guess = wordle.give_guess()
+            print(guess, end=' ')
+            score += 1
+            hint = Wordle.hint_list[ans_idx][Wordle.supported_guesses_reversed[guess]]
+            if hint == 242:
+                break
+            wordle.store_result(guess, hint)
+        print(ans, score)
+        wordle.clear()
 
 
 if __name__ == '__main__':
     # solve_hints()
-    pass
+    # wordle = Wordle()
+    # while True:
+    #     a = input()
+    #     if a == 'g':
+    #         wordle.give_guess()
+    #     elif a == 'n':
+    #         wordle.clear()
+    #     else:
+    #         b, c = a.split()
+    #         c = [int(i) for i in c]
+    #         wordle.store_result(b, c)
+    simulate()
