@@ -33,8 +33,7 @@ def solve_hints():
 
 
 def entropy_to_expected_score(ent):
-    min_score = 2 ** (-ent) + 2 * (1 - 2 ** (-ent))
-    return min_score + 1.5 * ent / 11.5
+    return 2 - 2**(-ent) + 1.5 / 11.5 * ent
 
 
 def calc_hint(ans, guess):
@@ -82,7 +81,7 @@ class Wordle:
         guess_list = []
         left_entropy = math.log2(self.len_psb_answers)
         for guess_idx, guess in enumerate(Wordle.supported_guesses):
-            prob = int(guess in self.psb_answers) / self.len_psb_answers
+            prob = 1 / self.len_psb_answers if guess in self.psb_answers else 0
             hint_count = np.zeros(3**5, dtype=np.int8)
             for ans in self.psb_answers:
                 hint_count[Wordle.hint_list[self.answers_reversed[ans]]
@@ -94,12 +93,12 @@ class Wordle:
                         ent += (count / self.len_psb_answers *
                                 (-math.log2(count / self.len_psb_answers)))
                 guess_list.append(
-                    [ent, prob * 1 + (1 - prob) * (1 + entropy_to_expected_score(left_entropy - ent))])
+                    prob + (1 - prob) * (1 + entropy_to_expected_score(left_entropy - ent)))
             # elif mode == Wordle.ABSURDLE:
             #     guess_exp_list.append(-hint_count[0])
         min_exp = 1000000
-        optimal_guess_idx = None
-        for guess_idx, (ent, exp) in enumerate(guess_list):
+        optimal_guess_idx = -1
+        for guess_idx, exp in enumerate(guess_list):
             if exp < min_exp:
                 min_exp = exp
                 optimal_guess_idx = guess_idx
@@ -111,6 +110,9 @@ class Wordle:
         # for psb_ans in self.possible_answers:
         #     if self.hint_dict[psb_ans][guess] != hint:
         #         self.possible_answers.remove(psb_ans)
+        if hint == 242:
+            self.psb_answers = guess
+            self.len_psb_answers = 1
         self.psb_answers = {psb_ans for psb_ans in self.psb_answers
                             if Wordle.hint_list[Wordle.answers_reversed[psb_ans]][Wordle.supported_guesses_reversed[guess]] == hint}
         self.len_psb_answers = len(self.psb_answers)
